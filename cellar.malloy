@@ -309,10 +309,15 @@ source: bottles is bottles_table extend {
 
   // ── flow: in and out over time ────────────────────────────────────────────
 
+  // Complete years only. The export stops mid-year (see `snapshot_date` on the
+  // cellars dimension), so including the final year draws a cliff that reads as
+  // "they stopped drinking" when it only means "the data stops here". The cutoff
+  // comes from the data via the `owner` join rather than from this result set,
+  // so filtering to a region you last drank in 2020 doesn't wrongly drop 2020.
   view: drinking_by_year is {
     group_by: drank is exit_date.year
     aggregate: drunk, value_drunk, avg_price_drunk
-    where: status = 'Drunk'
+    where: status = 'Drunk' and exit_date.year < owner.snapshot_date.year
     order_by: drank asc
   }
 
@@ -347,6 +352,15 @@ source: bottles is bottles_table extend {
   }
 
   // Weekday drinking is the everyday cellar; weekend is the occasion cellar.
+  //
+  // Grouped by the raw day NUMBER, deliberately. Two attempts at a friendlier
+  // axis both failed against the renderer: adding the day name as a second
+  // group_by makes the chart read it as a series (`# hidden` does not keep a
+  // dimension out of a chart), and mapping the number to a name in a second
+  // `select:` stage turns every column into a dimension, which a bar chart
+  // rejects outright. One numeric dimension sorts correctly and renders; the
+  // dashboard tile carries the "1 = Sunday" gloss. (Verified: 2026-04-27, a
+  // Monday, returns 2.)
   view: by_weekday is {
     group_by: weekday is day_of_week(exit_date)
     aggregate: drunk, avg_price_drunk
@@ -355,7 +369,19 @@ source: bottles is bottles_table extend {
   }
 
   view: recent_pours is {
-    group_by: exit_date, wine, producer, vintage_label, bottle_price, occasion
+    group_by:
+      # label="Opened"
+      exit_date
+      wine
+      producer
+      # label="Vintage"
+      vintage_label
+      # label="Paid" currency
+      bottle_price
+      // coalesced because the renderer prints a null as "∅", and a bottle
+      // opened for no particular reason should just leave the cell empty.
+      # label="Occasion"
+      occasion_text is coalesce(occasion, '')
     where: status = 'Drunk'
     order_by: exit_date desc
     limit: 40
@@ -413,9 +439,11 @@ source: purchases is purchases_table extend {
     undelivered_value is lot_cost.sum() { where: not delivered }
     avg_days_to_delivery is days_to_delivery.avg()
 
+  // Complete years only — same reasoning as bottles.drinking_by_year.
   view: spend_by_year is {
     group_by: bought is purchase_date.year
     aggregate: total_spend, bottles_bought, avg_bottle_price
+    where: purchase_date.year < owner.snapshot_date.year
     order_by: bought asc
   }
 
@@ -460,6 +488,7 @@ source: purchases is purchases_table extend {
 
   // Which calendar months you actually buy in — auction season, release windows,
   // December gifting.
+  // One numeric dimension, for the same renderer reasons as bottles.by_weekday.
   view: seasonality is {
     group_by: month_of_year is month(purchase_date)
     aggregate: bottles_bought, total_spend
@@ -467,22 +496,56 @@ source: purchases is purchases_table extend {
   }
 
   view: in_transit is {
-    group_by: purchase_date, wine, producer, store_name, quantity, lot_cost
+    group_by:
+      # label="Ordered"
+      purchase_date
+      wine
+      producer
+      # label="Merchant"
+      store_name
+      # label="Bottles"
+      quantity
+      # label="Cost" currency
+      lot_cost
     where: not delivered
     order_by: purchase_date desc
     limit: 40
   }
 
   view: recent_orders is {
-    group_by: purchase_date, store_name, order_number
-    aggregate: wines is wine_count, bottles_bought, total_spend
+    group_by:
+      # label="Ordered"
+      purchase_date
+      # label="Merchant"
+      store_name
+      # label="Order"
+      order_number
+    aggregate:
+      # label="Wines"
+      wines is wine_count
+      # label="Bottles"
+      bottles_bought
+      # label="Total" currency
+      total_spend
     order_by: purchase_date desc
     limit: 30
   }
 
   view: biggest_lots is {
-    group_by: purchase_date, wine, producer, vintage_label, quantity, bottle_price
-    aggregate: cost is total_spend
+    group_by:
+      # label="Ordered"
+      purchase_date
+      wine
+      producer
+      # label="Vintage"
+      vintage_label
+      # label="Bottles"
+      quantity
+      # label="Per bottle" currency
+      bottle_price
+    aggregate:
+      # label="Lot cost" currency
+      cost is total_spend
     order_by: cost desc
     limit: 25
   }

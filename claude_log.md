@@ -175,6 +175,45 @@ matters. Ask for the render.
 
 **User:**
 
+> sure, push first so I can verify myself.
+
+**Claude:** Reviewed Buying and Drinking in `dashboard dev` — the two dashboards
+whose layout had never been seen. The colspans turned out fine (KPIs 3-up,
+charts 2-up, tables full width), but four other things were wrong:
+
+1. **Both by-year trends ended in a cliff.** The export stops 2026-05-01, so the
+   final year is four months long and the line plunged — reading as "they
+   stopped drinking" when it only meant "the data stops here". Fixed by giving
+   the cellars dimension a `snapshot_date` in `build_data.py` and filtering the
+   trends to complete years. The cutoff deliberately comes from the DATA via the
+   `owner` join, not from the result set: deriving it from the visible rows
+   would wrongly declare 2020 partial the moment you filtered to a region you
+   stopped buying in 2020.
+2. **Every detail table showed raw field names and bare numbers** — `exit_date`,
+   `lot_cost`, `829.57`. Added `# label` and `# currency` throughout.
+3. **The renderer printed `∅`** for bottles opened with no occasion noted.
+   Coalesced to an empty cell.
+4. **"How bottles left"** was ambiguous — remaining, or departed? Now "How
+   bottles left the cellar".
+
+Then a self-inflicted detour worth recording. Trying to label the weekday and
+month axes with names instead of numbers, two approaches failed in a row:
+grouping by both the number and the name (with `# hidden` on the number) made
+the renderer treat the number as the x-axis and the names as a seven-colour
+legend; mapping the number to a name in a second `select:` stage turned every
+column into a dimension, and a bar chart rejects three. Reverted to the original
+single numeric dimension — which had rendered correctly all along — and put the
+gloss in the tile title instead ("Which day of the week (1 = Sunday)"). The
+model comment records both dead ends so the next person doesn't retry them.
+
+Also learned that `dashboard dev` caches table schemas at startup: adding
+`snapshot_date` to the parquet produced "'snapshot_date' is not defined" until
+the server was restarted, even though the CLI and lint were both happy.
+
+---
+
+**User:**
+
 > by the way /web-setup is what fixed the problem
 
 **Claude:** Noted for the record — after several wrong guesses on my part (the

@@ -310,9 +310,29 @@ con.sql("""CREATE VIEW bottles AS
   LEFT JOIN order_lots l
     ON l.cellar = c.cellar AND l.order_number = c.order_number AND l.wine_id = c.wine_id""")
 
+# --------------------------------------------------------------- snapshot ---
+# The last day this export knows about. It rides on the cellars dimension —
+# which every fact source joins as `owner` — so a by-year trend can drop its
+# final, incomplete year using a fact about the DATA rather than about whatever
+# the dashboard happens to be filtered to. Deriving the cutoff from a filtered
+# result set instead would wrongly declare 2020 "partial" the moment you filtered
+# to a region you stopped buying in 2020.
+con.sql("""CREATE VIEW snapshot AS
+  SELECT max(d) AS snapshot_date FROM (
+    SELECT max(exit_date)     AS d FROM bottles
+    UNION ALL SELECT max(purchase_date) FROM bottles
+    UNION ALL SELECT max(purchase_date) FROM purchases
+    UNION ALL SELECT max(tasting_date)  FROM notes
+  )""")
+
+con.sql("""CREATE VIEW cellars_out AS
+  SELECT c.*, s.snapshot_date FROM cellars c CROSS JOIN snapshot s""")
+
+print("snapshot date:", con.sql("SELECT snapshot_date FROM snapshot").fetchone()[0])
+
 print(f"writing {OUT}")
 for name, sql in (
-    ("cellars", "SELECT * FROM cellars"),
+    ("cellars", "SELECT * FROM cellars_out"),
     ("wines", "SELECT * FROM wines"),
     ("bottles", "SELECT * FROM bottles"),
     ("purchases", "SELECT * FROM purchases"),

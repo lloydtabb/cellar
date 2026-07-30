@@ -47,13 +47,13 @@ query: drinking is bottles -> {
     drunk_by_producer
     // Weekday drinking is the everyday cellar; the weekend is the occasion one.
     # bar_chart
-    # label="Which day of the week"
+    # label="Which day of the week (1 = Sunday)"
     by_weekday
     # bar_chart
     # label="Years held before opening"
     holding_time
     # bar_chart
-    # label="How bottles left"
+    # label="How bottles left the cellar"
     by_status
 
   # colspan=6
