@@ -18,10 +18,15 @@
 
 import "storage.malloy"
 
+#" The three cellar owners. Join target for `owner`; carries `cellar_name`
+#" (the display name to filter on) and `snapshot_date`, the last day this
+#" export knows about.
 source: cellars is cellars_table extend {
   primary_key: cellar
 }
 
+#" The wine catalog — one row per wine, with producer, region, appellation
+#" and varietal. Reference data; the bottle-level facts live in `bottles`.
 source: wines is wines_table extend {
   primary_key: wine_id
 }
@@ -30,6 +35,10 @@ source: wines is wines_table extend {
 // Defined first so `bottles` can join it: a bottle's rating is whatever you
 // wrote about that wine.
 
+#" One row per tasting note. Scores here are UNWEIGHTED (one note, one vote)
+#" — use this for "how did I rate things", not `bottles.rating`. Notes sharing
+#" an `event_id` were one sitting. `searchable` is a lowercased haystack of
+#" wine + producer + event title + note text for free-text search.
 source: tasting_notes is notes_table extend {
   primary_key: note_id
   join_one: owner is cellars on cellar = owner.cellar
@@ -128,6 +137,10 @@ source: tasting_notes is notes_table extend {
 
 // ── every bottle, on the rack or gone ───────────────────────────────────────
 
+#" Every bottle ever in a cellar — on the rack and long gone — separated by
+#" `status` (In cellar / Drunk / Sold / Lost / Flawed / Given away). The main
+#" source: "what do I own" and "what did I drink" are both here, on one
+#" timeline. Filter a cellar with `owner.cellar_name`.
 source: bottles is bottles_table extend {
   primary_key: bottle_key
   join_one: owner is cellars on cellar = owner.cellar
@@ -401,6 +414,9 @@ source: bottles is bottles_table extend {
 // this is where order-level questions live (what shipped together, what's
 // still in transit, what a case cost).
 
+#" One row per purchase LOT (N bottles of one wine on one order). Use for
+#" order-shaped questions — spend, merchants, what shipped together, what is
+#" still in transit. For per-bottle questions use `bottles`.
 source: purchases is purchases_table extend {
   join_one: owner is cellars on cellar = owner.cellar
 
