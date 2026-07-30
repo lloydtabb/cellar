@@ -57,6 +57,18 @@ source: tasting_notes is notes_table extend {
       pick 'Good (87–89)' when rating >= 87
       else 'Ordinary (<87)'
 
+    // One haystack for the Tasting Notes search box, lowercased once here so
+    // the dashboard doesn't have to. Covers everything someone might half-
+    // remember about a note: the wine, who made it, the night it was opened,
+    // and the note itself — so "book club" finds the event and "forest floor"
+    // finds the prose, from the same box. coalesce because any of them can be
+    // null, and concat would swallow the whole string if one were.
+    searchable is lower(concat(
+      coalesce(wine, ''), ' ',
+      coalesce(producer, ''), ' ',
+      coalesce(event_title, ''), ' ',
+      coalesce(tasting_note, '')))
+
   measure:
     note_count is count()
     avg_rating is rating.avg()

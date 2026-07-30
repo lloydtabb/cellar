@@ -105,6 +105,41 @@ headless Chromium and had a real grid bug fixed as a result.
 
 ---
 
+**User:** (after several rounds of unblocking — creating the repo, pushing the
+bundle by hand, and finally granting the session write access)
+
+> The tasting notes page page has a lot of repeat information. Let's just make
+> it a list with search boxes and so people can find their notes that matter to
+> them. Let's make a 'Open Next' dashboard that picks a bottle for you and tells
+> you something about the bottle. Do this page in react.
+
+**Claude:** Both, in one pass.
+
+*Tasting Notes* lost the score histogram, the average-by-year line, the two
+producer/region bars and two of the three tables — they restated each other and
+none of them helped anyone find a note. It's now filters plus one list. The
+interesting part is the search box: rather than searching note text alone, the
+model gained a `searchable` dimension (wine + producer + event title + note
+text, lowercased once), so a single box finds "book club" (208 notes, an event
+title), "rousseau" (40, a producer) and "forest floor" (90, the prose).
+
+*Open Next* replaced the three ranked tables with a page that commits to one
+bottle. The `.malloy` returns a pool and `open_next.jsx` picks from it, so "pick
+another" is a client-side reshuffle. Two modelling bugs surfaced while building
+it and were fixed rather than shipped:
+
+- Grouping by `(wine, location, bin)` split each wine across shelves, so
+  `already_drunk` read 0 — a drunk bottle carries the location it was drunk
+  from. Regrouped to the wine with shelves nested.
+- `where: in_cellar` at the stage level zeroed every drinking measure before it
+  could be computed. Removed it and used `having: on_hand > 0`, letting each
+  measure's own status filter do the work.
+
+Also excluded bottles CellarTracker marks `(pending)` — they have no shelf and
+may not have arrived, so "go pull this one" doesn't apply to them.
+
+---
+
 ## What got built
 
 | file | what it is |

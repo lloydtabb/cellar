@@ -29,6 +29,20 @@ given:
   # label="Time period"
   PERIOD :: filter<date> is f''
 
+  # label="Wine" suggest { query=wine_suggest dimension=wine }
+  WINE :: filter<string> is f''
+
+  # label="Score" range_min=75 range_max=100
+  SCORE :: filter<number> is f''
+
+  // Free text over the note itself — "forest floor", "corked", "with Sam".
+  // A plain string rather than a filter<string> so the box can be typed into
+  // literally: the query wraps it in wildcards and lowercases both sides, so
+  // "Forest Floor" and "forest" both find the same notes. Empty matches
+  // everything, which is the natural "no search".
+  # label="Note contains"
+  SEARCH :: string is ''
+
 // Suggestion sources. Each one narrows by the OTHER givens — pick a cellar and
 // the region list becomes that cellar's regions — so the lists never offer a
 // combination that returns nothing. Each query omits its own given, which is
@@ -58,6 +72,19 @@ query: producer_suggest is bottles -> {
     region ~ $REGION,
     style ~ $STYLE
   order_by: bottles_here desc
+  limit: 500
+}
+
+// Wines you have actually written about — this feeds the Tasting Notes search,
+// so suggesting from the note grain keeps it to wines with something to read.
+query: wine_suggest is tasting_notes -> {
+  group_by: wine
+  aggregate: notes_here is note_count
+  where:
+    owner.cellar_name ~ $CELLAR,
+    region ~ $REGION,
+    producer ~ $PRODUCER
+  order_by: notes_here desc
   limit: 500
 }
 

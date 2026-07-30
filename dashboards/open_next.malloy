@@ -1,55 +1,84 @@
 ##! experimental { givens }
 
-// The one an owner actually opens on a Friday: which bottle should I pull?
+// "Pick something for me."
 //
-// Mostly tables, on purpose. The other dashboards answer "what is true about my
-// cellar"; this one answers "what do I do tonight", and the answer is a list of
-// specific bottles with a reason attached to each.
+// This page used to be three ranked tables — last bottles, never-opened,
+// oldest — which is the same job done as homework. Now the page commits to one
+// bottle and tells you about it, and the tables' logic survives as the moods in
+// open_next.jsx (Last bottle / Never opened / Been waiting).
+//
+// The query's job is to hand the component a POOL, not an answer: every bottle
+// on the rack that passes the filters, one row per wine per shelf, carrying
+// everything the card needs. Choosing from the pool is interaction, so it lives
+// in the component — that way "pick another" is instant and doesn't re-query.
+//
+// One row per (wine, location, bin) rather than per wine, because the card
+// tells you which shelf to walk to, and a wine split across two rooms is two
+// different walks.
 
 import "../cellar.malloy"
 import "../givens.malloy"
 
-#" Which bottle to pull tonight — last bottles, forgotten bottles, old bottles.
-# artifact { title="What to Open" }
-# dashboard { columns=6 }
+#" Can't decide? Let the cellar choose, and tell you why.
+# artifact { title="Open Next" }
 query: open_next is bottles -> {
   where:
     owner.cellar_name ~ $CELLAR,
     region ~ $REGION,
     producer ~ $PRODUCER,
-    style ~ $STYLE
+    style ~ $STYLE,
+    // Bottles CellarTracker still marks pending have no shelf yet — they may
+    // not even have arrived. You can't walk to one, so they're not candidates.
+    location != '(pending)'
+    // NOTE: no `in_cellar` here. The measures below carry their own status
+    // filters (`on_hand` counts in-cellar, `already_drunk` counts drunk), so
+    // filtering the stage to in-cellar rows would zero out the drinking history
+    // this card is built to show. `having: on_hand > 0` does the job instead.
 
-  # colspan=2
+  group_by:
+    wine
+    producer
+    region
+    appellation
+    varietal
+    style
+    vintage_label
+
   aggregate:
-    # label="Bottles on hand"
     on_hand
-    # label="Distinct wines"
-    wines_on_hand
-    # label="Average bottle" currency
-    avg_bottle_price
+    stock_value is cellar_value
+    price is avg_bottle_price
+    // Bottle-weighted, but this groups by wine, so it's the wine's own average.
+    score is rating
+    notes_written is note_count
+    already_drunk is drunk
+    years_on_rack is years_held.avg() { where: in_cellar }
 
-  # colspan=6
-  nest:
-    # break
-    // The most actionable rows in a cellar: one bottle left, and you liked it.
-    # label="Last bottle of something you loved"
-    last_bottles
+  // Only wines you can actually pull a bottle of tonight.
+  having: on_hand > 0
 
-    # label="Bought, shelved, never opened"
-    never_tasted
+  // Where to walk. A wine split across two rooms lists both.
+  nest: shelves is {
+    group_by: location, bin, bottle_size
+    aggregate: bottles_here is on_hand
+    where: in_cellar
+    order_by: bottles_here desc
+    limit: 5
+  }
 
-    # label="Oldest vintages still here"
-    oldest_on_hand
+  // The last thing you said about it, to print on the card. Three so the
+  // component can fall back if the most recent note has no text.
+  nest: your_notes is {
+    // Aliased (not `notes.rating`) because order_by takes output names, and
+    // because a bare `rating` would collide with the bottles measure of that name.
+    group_by:
+      note_date is notes.tasting_date
+      note_score is notes.rating
+      note_text is notes.tasting_note
+    order_by: note_date desc
+    limit: 3
+  }
 
-  # colspan=3
-  nest:
-    // Context for the lists above: how the cellar is distributed by age, and how
-    // long things actually sit before they get opened.
-    # break
-    # line_chart
-    # label="Bottles by vintage"
-    by_vintage
-    # bar_chart
-    # label="Years on the rack before opening"
-    holding_time
+  order_by: on_hand desc
+  limit: 400
 }

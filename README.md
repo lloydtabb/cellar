@@ -11,13 +11,26 @@ files served alongside the site. There is no backend and no database server.
 | | | |
 |---|---|---|
 | **The Cellar** | `dashboards/overview.malloy` | What's on the rack: bottles, value, regions, price bands, where it's stored. |
-| **What to Open** | `dashboards/open_next.malloy` | Which bottle to pull tonight — last bottles of wines you rated highly, bottles you've never opened, oldest vintages. |
+| **Open Next** | `dashboards/open_next.malloy` + `.jsx` | Picks one bottle off your rack and tells you why — where it's shelved, what you paid, what you said last time. |
 | **Buying** | `dashboards/buying.malloy` | Spend over time, merchants, what's still in transit, biggest lots. |
 | **Drinking** | `dashboards/drinking.malloy` | Consumption rate, what you open and when, and what left the cellar some other way. |
-| **Tasting Notes** | `dashboards/tasting.malloy` | Score distribution, best producers and regions, verticals and tasting nights. |
+| **Tasting Notes** | `dashboards/tasting.malloy` | A search page — find a note by wine, producer, region, score, or free text over what you wrote. |
 
 Every dashboard is filtered by **Cellar** first — the three cellars are three
 different people, and blending them isn't an overview of anything.
+
+**Open Next** is the only page with a custom component. Its `.malloy` returns a
+*pool* — every wine with a bottle on the rack, carrying its shelf, price,
+history and notes — and `open_next.jsx` chooses from that pool and draws the
+card. Choosing is interaction, not analysis, so it belongs in the component:
+"pick another" is a client-side reshuffle that never re-queries. The mood chips
+(Last bottle / Never opened / Been waiting / You loved it) are predicates over
+the same pool.
+
+**Tasting Notes** searches a `searchable` dimension on `tasting_notes` — the
+wine, producer, event title and note text concatenated and lowercased once in
+the model. That's what lets one box find "book club" (an event), "rousseau" (a
+producer) and "forest floor" (the prose) without the user choosing a field.
 
 ## The model
 

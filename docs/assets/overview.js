@@ -1,2 +1,2 @@
 globalThis.process||={env:{},platform:'browser',versions:{},argv:[],cwd:()=>'/'};
-import{a as o}from"./chunk-37SJNZYA.js";var r=null;o(r);
+import{g as o}from"./chunk-SAD7HS3V.js";var r=null;o(r);
