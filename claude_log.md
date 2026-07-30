@@ -140,6 +140,51 @@ may not have arrived, so "go pull this one" doesn't apply to them.
 
 ---
 
+**User:**
+
+> can you verify with `malloyyo dashboard dev`, that should work for you
+
+**Claude:** It did, and it was the single most useful correction in the whole
+build. `dashboard dev` runs the queries **server-side** through the same node
+DuckDB connection the MCP tools use, so the browser only renders results — none
+of the WASM/CDN machinery that the sandbox blocks. Everything that had been
+"reasoned about, not seen" became visible immediately.
+
+Three real bugs in the first screenshot, none of which the earlier static
+harness could have caught:
+
+1. **The card had no borders, dividers or panel background.** It was styled with
+   `var(--line)` / `var(--card)` / `var(--muted)` from `site.css`, but custom
+   components render in an *iframe* where those don't exist — the runtime
+   exposes `--dash-*` instead. Every border silently collapsed. Fixed by
+   resolving each colour once through `var(--dash-border, var(--line, #e4e6eb))`
+   so it works in both hosts.
+2. **Duplicate shelf chips** — "Kitchen Cooler — 1" listed twice. The rows
+   differed by `bottle_size` (750ml vs magnum), which the label didn't show.
+   Whether a bottle is a 1.5L is exactly the sort of thing that decides if you
+   open it tonight, so size joined the label.
+3. **The shelves didn't add up.** "7 on the rack" sat above five chips
+   accounting for five bottles, because the nest was capped at 5. Raised to 12
+   and added a "+N elsewhere" chip for the remainder.
+
+The lesson is the obvious one in hindsight: a component that compiles, queries
+correctly and lays out in isolation can still be broken in the only context that
+matters. Ask for the render.
+
+---
+
+**User:**
+
+> by the way /web-setup is what fixed the problem
+
+**Claude:** Noted for the record — after several wrong guesses on my part (the
+GitHub App settings page, per-repo access), the thing that actually granted this
+session write access was `/web-setup`. Worth knowing that read access can look
+healthy while writes 403, because public repos clone without any credential at
+all; that's what made the failure look repo-specific when it was session-wide.
+
+---
+
 ## What got built
 
 | file | what it is |

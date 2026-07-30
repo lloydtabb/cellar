@@ -63,7 +63,10 @@ query: open_next is bottles -> {
     aggregate: bottles_here is on_hand
     where: in_cellar
     order_by: bottles_here desc
-    limit: 5
+    // Bottles scatter one-per-bin, so a wine you own a dozen of can occupy a
+    // dozen shelves. 12 covers nearly everything; the component adds an
+    // "+N elsewhere" chip when the listed shelves don't account for on_hand.
+    limit: 12
   }
 
   // The last thing you said about it, to print on the card. Three so the

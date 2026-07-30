@@ -50,51 +50,70 @@ const when = (iso) => {
     : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 };
 
-const shelfLabel = (s) =>
-  [s.location, s.bin].filter(Boolean).join(" · ") || "unshelved";
+// Size is part of the label, not decoration: two rows can share a room and a
+// bin and differ only in being a magnum, which renders as a baffling duplicate
+// otherwise — and "it's a 1.5L" changes whether you open it tonight.
+const shelfLabel = (s) => {
+  const where = [s.location, s.bin].filter(Boolean).join(" · ") || "unshelved";
+  return s.bottle_size && s.bottle_size !== "750ml"
+    ? `${where} (${s.bottle_size})`
+    : where;
+};
 
 const S = `
-.on{--wine:#7b2436;--wine-soft:#f7eff1;max-width:820px;margin:0 auto;padding:34px 22px 64px}
+/* Two hosts, two sets of theme variables: the bundled page defines site.css's
+   --line/--card/--muted, and the dashboard runtime (which renders this in an
+   iframe) defines --dash-*. Resolve each colour once here through both, with a
+   literal last resort, so the card is bordered and legible either way — a card
+   whose --line doesn't resolve loses every border and divider silently. */
+.on{
+  --edge:var(--dash-border,var(--line,#e4e6eb));
+  --surface:var(--dash-panel-bg,var(--card,#fff));
+  --dim:var(--dash-muted,var(--muted,#6b7280));
+  --ink:var(--dash-fg,var(--fg,#16181d));
+  --wine:#7b2436;--wine-soft:#f7eff1;
+  color:var(--ink);max-width:820px;margin:0 auto;padding:34px 22px 64px}
 @media(prefers-color-scheme:dark){.on{--wine:#e0899b;--wine-soft:#241a1d}}
 
 .on h1{font-family:Georgia,"Iowan Old Style",serif;font-size:27px;font-weight:600;margin:0 0 4px}
-.on .lede{color:var(--muted);font-size:14.5px;margin:0 0 20px}
+.on .lede{color:var(--dim);font-size:14.5px;margin:0 0 20px}
 
 .moods{display:flex;flex-wrap:wrap;gap:7px;margin:18px 0 20px}
 .moods button{font:inherit;font-size:13px;padding:6px 13px;border-radius:999px;cursor:pointer;
-  border:1px solid var(--line);background:var(--card);color:var(--fg);transition:.15s}
+  border:1px solid var(--edge);background:var(--surface);color:var(--ink);transition:.15s}
 .moods button:hover{border-color:var(--wine)}
 .moods button[aria-pressed="true"]{background:var(--wine);border-color:var(--wine);color:#fff}
 
-.card{border:1px solid var(--line);border-radius:16px;background:var(--card);overflow:hidden}
-.card .top{padding:26px 26px 22px;border-bottom:1px solid var(--line)}
+.card{border:1px solid var(--edge);border-radius:16px;background:var(--surface);overflow:hidden}
+.card .top{padding:26px 26px 22px;border-bottom:1px solid var(--edge)}
 .vint{font-family:Georgia,serif;font-size:13px;letter-spacing:.1em;color:var(--wine);margin:0 0 7px}
 .name{font-family:Georgia,"Iowan Old Style",serif;font-size:30px;line-height:1.22;font-weight:600;margin:0 0 10px}
-.orig{color:var(--muted);font-size:14px;margin:0}
+.orig{color:var(--dim);font-size:14px;margin:0}
 
 .why{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0}
 .why span{font-size:12.5px;padding:4px 11px;border-radius:999px;background:var(--wine-soft);color:var(--wine);font-weight:500}
 
-.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--line)}
-.facts div{background:var(--card);padding:15px 16px}
-.facts dt{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 4px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;background:var(--edge)}
+.facts div{background:var(--surface);padding:15px 16px}
+.facts dt{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin:0 0 4px}
 .facts dd{margin:0;font-size:19px;font-family:Georgia,serif;font-variant-numeric:tabular-nums}
 
-.sect{padding:20px 26px;border-top:1px solid var(--line)}
-.sect h3{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 10px}
+.sect{padding:20px 26px;border-top:1px solid var(--edge)}
+.sect h3{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--dim);font-weight:600;margin:0 0 10px}
 .shelves{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:7px}
-.shelves li{font-size:13px;padding:5px 11px;border:1px solid var(--line);border-radius:8px}
+.shelves li{font-size:13px;padding:5px 11px;border:1px solid var(--edge);border-radius:8px}
 .shelves b{font-variant-numeric:tabular-nums}
+.shelves .more{color:var(--dim);border-style:dashed}
 .note p{margin:0 0 6px;font-size:14.5px;line-height:1.6}
-.note .meta{font-size:12.5px;color:var(--muted)}
+.note .meta{font-size:12.5px;color:var(--dim)}
 
 .again{margin:22px 0 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .again button{font:inherit;font-size:14px;font-weight:550;padding:10px 20px;border-radius:10px;cursor:pointer;
   background:var(--wine);color:#fff;border:1px solid var(--wine)}
 .again button:hover{opacity:.9}
-.again .count{font-size:13px;color:var(--muted)}
+.again .count{font-size:13px;color:var(--dim)}
 
-.msg{padding:34px 26px;text-align:center;color:var(--muted);font-size:14.5px}
+.msg{padding:34px 26px;text-align:center;color:var(--dim);font-size:14.5px}
 `;
 
 export default function OpenNext({ givens }) {
@@ -118,6 +137,12 @@ export default function OpenNext({ givens }) {
   // Most recent note that actually has prose — the query asks for three so
   // there's something to fall back to.
   const note = bottle?.your_notes?.find((n) => n.note_text);
+
+  // The shelf nest is capped, so the listed shelves can add up to less than
+  // on_hand. Saying so is better than letting "7 on the rack" sit above five
+  // chips that account for five bottles.
+  const shelved = (bottle?.shelves ?? []).reduce((n, s) => n + (s.bottles_here ?? 0), 0);
+  const elsewhere = (bottle?.on_hand ?? 0) - shelved;
 
   return (
     <main className="on">
@@ -184,6 +209,7 @@ export default function OpenNext({ givens }) {
                   {bottle.shelves.map((s, i) => (
                     <li key={i}>{shelfLabel(s)} — <b>{s.bottles_here}</b></li>
                   ))}
+                  {elsewhere > 0 && <li className="more">+{elsewhere} elsewhere</li>}
                 </ul>
               </div>
             )}

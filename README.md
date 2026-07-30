@@ -90,6 +90,8 @@ development and for the browser fetching from the deployed site.
 npm install -g @malloydata/malloyyo
 
 malloyyo dashboard dev      # live preview, hot-reloads .malloy and .jsx edits
+                            # (runs queries server-side — the only way to see a
+                            #  custom component render without DuckDB-WASM)
 malloyyo lint               # compile every dashboard, check drills and components
 malloyyo dashboard bundle   # build the static site into docs/
 ```
