@@ -1,0 +1,61 @@
+##! experimental { givens }
+
+// The landing dashboard: what's on the rack right now.
+//
+// Every tile is scoped to bottles still in the cellar (the `on_hand` /
+// `cellar_value` measures carry `where: in_cellar` themselves), so this reads as
+// a snapshot rather than a history. The history lives in buying/ and drinking/.
+
+import "../cellar.malloy"
+import "../givens.malloy"
+
+#" Everything on the rack right now — how much, from where, and what it's worth.
+# artifact { title="The Cellar" }
+# dashboard { columns=6 }
+query: overview is bottles -> {
+  where:
+    owner.cellar_name ~ $CELLAR,
+    region ~ $REGION,
+    producer ~ $PRODUCER,
+    style ~ $STYLE
+
+  # colspan=2
+  aggregate:
+    # label="Bottles on hand"
+    on_hand
+    # label="Cellar value" currency
+    cellar_value
+    # label="Distinct wines"
+    wines_on_hand
+    # label="Producers"
+    producer_count
+    # label="Average bottle" currency
+    avg_bottle_price
+    # label="Dearest bottle" currency
+    dearest_bottle
+
+  # colspan=3
+  nest:
+    # break
+    # bar_chart
+    # label="Where it comes from"
+    by_region
+    # bar_chart
+    # label="What it costs"
+    by_price_band
+    # bar_chart
+    # label="Red, white, sparkling"
+    by_style
+    # bar_chart
+    # label="Where it's stored"
+    by_location
+    # line_chart
+    # label="Bottles by vintage"
+    by_vintage
+    # bar_chart
+    # label="Bottle sizes"
+    by_size
+    # colspan=6
+    # label="Deepest holdings"
+    deep_holdings
+}

@@ -1,0 +1,7 @@
+// The published query surface — what an MCP client or the claude.ai explore
+// preview is allowed to ask about. Dashboards do NOT come through here; they're
+// discovered as dashboards/*.malloy.
+
+import "cellar.malloy"
+
+export { bottles, purchases, tasting_notes, wines, cellars }

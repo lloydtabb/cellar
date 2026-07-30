@@ -1,0 +1,17 @@
+// Where the data lives.
+//
+// The parquet sits in docs/data/ — docs/ is the directory GitHub Pages
+// publishes, so one spelling works in every context:
+//
+//   VSCode / malloyyo dashboard dev   DuckDB reads docs/data/*.parquet off disk
+//   malloyyo dashboard bundle         the site IS docs/, so the browser fetches
+//                                     ./data/*.parquet and registers it under
+//                                     this same name
+//
+// Rebuild these from the CSV exports with `python3 scripts/build_data.py`.
+
+source: cellars_table is duckdb.table('docs/data/cellars.parquet') extend {}
+source: wines_table is duckdb.table('docs/data/wines.parquet') extend {}
+source: bottles_table is duckdb.table('docs/data/bottles.parquet') extend {}
+source: purchases_table is duckdb.table('docs/data/purchases.parquet') extend {}
+source: notes_table is duckdb.table('docs/data/notes.parquet') extend {}

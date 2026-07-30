@@ -1,0 +1,63 @@
+##! experimental { givens }
+
+// Runs on `purchases` (grain = the LOT) rather than `bottles`, because the
+// questions here are order-shaped: what did this shipment cost, what's still in
+// transit, which merchant gets the most of my money.
+
+import "../cellar.malloy"
+import "../givens.malloy"
+
+#" What you're spending, where you're spending it, and what's still in transit.
+# artifact { title="Buying" }
+# dashboard { columns=6 }
+query: buying is purchases -> {
+  where:
+    owner.cellar_name ~ $CELLAR,
+    region ~ $REGION,
+    producer ~ $PRODUCER,
+    style ~ $STYLE,
+    purchase_date ~ $PERIOD
+
+  # colspan=2
+  aggregate:
+    # label="Total spend" currency
+    total_spend
+    # label="Bottles bought"
+    bottles_bought
+    # label="Average bottle" currency
+    avg_bottle_price
+    # label="Orders"
+    order_count
+    # label="Bottles in transit"
+    undelivered_bottles
+    # label="Value in transit" currency
+    undelivered_value
+
+  # colspan=3
+  nest:
+    # break
+    # line_chart
+    # label="Spend by year"
+    spend_by_year
+    # bar_chart
+    # label="Where you buy"
+    by_store
+    # bar_chart
+    # label="What you buy"
+    by_region
+    // Auction season, mailing-list release windows, December gifting — buying is
+    // never evenly spread across the year.
+    # bar_chart
+    # label="Which months you buy in"
+    seasonality
+
+  # colspan=6
+  nest:
+    # break
+    # label="Still in transit"
+    in_transit
+    # label="Recent orders"
+    recent_orders
+    # label="Biggest single lots"
+    biggest_lots
+}

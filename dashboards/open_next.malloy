@@ -1,0 +1,55 @@
+##! experimental { givens }
+
+// The one an owner actually opens on a Friday: which bottle should I pull?
+//
+// Mostly tables, on purpose. The other dashboards answer "what is true about my
+// cellar"; this one answers "what do I do tonight", and the answer is a list of
+// specific bottles with a reason attached to each.
+
+import "../cellar.malloy"
+import "../givens.malloy"
+
+#" Which bottle to pull tonight — last bottles, forgotten bottles, old bottles.
+# artifact { title="What to Open" }
+# dashboard { columns=6 }
+query: open_next is bottles -> {
+  where:
+    owner.cellar_name ~ $CELLAR,
+    region ~ $REGION,
+    producer ~ $PRODUCER,
+    style ~ $STYLE
+
+  # colspan=2
+  aggregate:
+    # label="Bottles on hand"
+    on_hand
+    # label="Distinct wines"
+    wines_on_hand
+    # label="Average bottle" currency
+    avg_bottle_price
+
+  # colspan=6
+  nest:
+    # break
+    // The most actionable rows in a cellar: one bottle left, and you liked it.
+    # label="Last bottle of something you loved"
+    last_bottles
+
+    # label="Bought, shelved, never opened"
+    never_tasted
+
+    # label="Oldest vintages still here"
+    oldest_on_hand
+
+  # colspan=3
+  nest:
+    // Context for the lists above: how the cellar is distributed by age, and how
+    // long things actually sit before they get opened.
+    # break
+    # line_chart
+    # label="Bottles by vintage"
+    by_vintage
+    # bar_chart
+    # label="Years on the rack before opening"
+    holding_time
+}

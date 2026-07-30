@@ -1,0 +1,62 @@
+##! experimental { givens }
+
+// Runs on `tasting_notes` (grain = the note), so the averages here are
+// unweighted — one note, one vote. The `rating` on the other dashboards comes
+// through the bottles join and is weighted by how many bottles you own, which is
+// the right reading there and the wrong one here.
+
+import "../cellar.malloy"
+import "../givens.malloy"
+
+#" Every note you've written — what scored well, and what you opened together.
+# artifact { title="Tasting Notes" }
+# dashboard { columns=6 }
+query: tasting is tasting_notes -> {
+  where:
+    owner.cellar_name ~ $CELLAR,
+    region ~ $REGION,
+    producer ~ $PRODUCER,
+    style ~ $STYLE,
+    tasting_date ~ $PERIOD
+
+  # colspan=2
+  aggregate:
+    # label="Notes written"
+    note_count
+    # label="Average score"
+    avg_rating
+    # label="Best score"
+    best_rating
+    # label="Wines rated"
+    rated_wine_count
+    # label="Tastings"
+    event_count
+
+  # colspan=3
+  nest:
+    # break
+    # bar_chart
+    # label="How you score"
+    score_distribution
+    # line_chart
+    # label="Average score by year"
+    ratings_over_time
+    # bar_chart
+    # label="Best producers (3+ notes)"
+    by_producer
+    # bar_chart
+    # label="Best regions (3+ notes)"
+    by_region
+
+  # colspan=6
+  nest:
+    # break
+    // Notes sharing an iEvent were one sitting — a vertical, a book club night,
+    // a Champagne Saturday.
+    # label="Tastings and verticals"
+    tastings
+    # label="Highest scores"
+    highest_rated
+    # label="Most recent notes"
+    recent_notes
+}

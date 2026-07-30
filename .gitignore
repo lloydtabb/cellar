@@ -1,0 +1,9 @@
+node_modules/
+__pycache__/
+*.pyc
+
+# Local scratch helpers, not part of the project.
+.mcpcall.mjs
+.shot.mjs
+.probe.mjs
+package-lock.json

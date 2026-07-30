@@ -1,0 +1,72 @@
+// The dashboard filter controls.
+//
+// Declared here rather than in cellar.malloy so the model stays given-free and
+// reusable; each dashboard decides for itself which of these it applies.
+//
+// Three cellars share this site, so CELLAR is the one given that is never empty:
+// a cellar overview that blends three people's racks isn't an overview of
+// anything. It filters on the display NAME (via the `owner` join) so the
+// dropdown reads "The Auction Veteran" rather than `veteran`.
+
+##! experimental { givens }
+
+import "cellar.malloy"
+
+given:
+  # label="Cellar" control=select suggest { query=cellar_suggest dimension=cellar_name }
+  CELLAR :: filter<string> is f'The Auction Veteran'
+
+  # label="Region" suggest { query=region_suggest dimension=region }
+  REGION :: filter<string> is f''
+
+  # label="Producer" suggest { query=producer_suggest dimension=producer }
+  PRODUCER :: filter<string> is f''
+
+  # label="Style" control=multiselect suggest { query=style_suggest dimension=style }
+  STYLE :: filter<string> is f''
+
+  // Applied to whichever date the dashboard is about — bought, drunk, tasted.
+  # label="Time period"
+  PERIOD :: filter<date> is f''
+
+// Suggestion sources. Each one narrows by the OTHER givens — pick a cellar and
+// the region list becomes that cellar's regions — so the lists never offer a
+// combination that returns nothing. Each query omits its own given, which is
+// what keeps the list from collapsing to the current pick.
+
+query: cellar_suggest is cellars -> {
+  group_by: cellar_name
+  order_by: cellar_name asc
+}
+
+query: region_suggest is bottles -> {
+  group_by: region
+  aggregate: bottles_here is on_hand
+  where:
+    owner.cellar_name ~ $CELLAR,
+    producer ~ $PRODUCER,
+    style ~ $STYLE
+  order_by: bottles_here desc
+  limit: 200
+}
+
+query: producer_suggest is bottles -> {
+  group_by: producer
+  aggregate: bottles_here is on_hand
+  where:
+    owner.cellar_name ~ $CELLAR,
+    region ~ $REGION,
+    style ~ $STYLE
+  order_by: bottles_here desc
+  limit: 500
+}
+
+query: style_suggest is bottles -> {
+  group_by: style
+  aggregate: bottles_here is on_hand
+  where:
+    owner.cellar_name ~ $CELLAR,
+    region ~ $REGION,
+    producer ~ $PRODUCER
+  order_by: bottles_here desc
+}

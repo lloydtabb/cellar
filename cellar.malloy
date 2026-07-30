@@ -1,0 +1,477 @@
+// The cellar semantic model.
+//
+// Three grains, and that's the whole thing:
+//
+//   bottles        one row per bottle EVER — on the rack or long gone
+//   purchases      one row per purchase lot (N bottles of one wine, one order)
+//   tasting_notes  one row per note written
+//
+// `bottles` is the union of CellarTracker's inventory.csv and consumed.csv,
+// separated by `status`. Keeping them together is what makes the interesting
+// questions one-liners: what you bought and what you drank sit on a single
+// timeline, and "6 bought, 4 drunk, 2 left" is one group-by instead of a stitch
+// across two tables. DuckDB scans the 15k rows fast enough that nothing here
+// needs pre-aggregating.
+//
+// Everything is scoped by `cellar` — three cellars live side by side, and 427
+// wines appear in more than one of them, so nothing joins on wine alone.
+
+import "storage.malloy"
+
+source: cellars is cellars_table extend {
+  primary_key: cellar
+}
+
+source: wines is wines_table extend {
+  primary_key: wine_id
+}
+
+// ── tasting notes ───────────────────────────────────────────────────────────
+// Defined first so `bottles` can join it: a bottle's rating is whatever you
+// wrote about that wine.
+
+source: tasting_notes is notes_table extend {
+  primary_key: note_id
+  join_one: owner is cellars on cellar = owner.cellar
+
+  dimension:
+    style is
+      pick 'Sparkling' when wine_type ~ '%Sparkling%'
+      pick 'Red' when wine_type ~ 'Red%'
+      pick 'White' when wine_type ~ 'White%'
+      pick 'Rosé' when wine_type ~ 'Ros%'
+      else 'Other'
+
+    vintage_label is
+      pick 'NV' when is_non_vintage
+      else vintage::string
+
+    // Notes that share an iEvent are one sitting — a vertical, a book club, a
+    // Champagne Saturday.
+    is_event is event_id is not null
+
+    score_band is
+      pick 'Outstanding (95+)' when rating >= 95
+      pick 'Excellent (93–94)' when rating >= 93
+      pick 'Very good (90–92)' when rating >= 90
+      pick 'Good (87–89)' when rating >= 87
+      else 'Ordinary (<87)'
+
+  measure:
+    note_count is count()
+    avg_rating is rating.avg()
+    best_rating is rating.max()
+    rated_wine_count is count(wine_id)
+    event_count is count(event_id)
+
+  view: by_producer is {
+    group_by: producer
+    aggregate: note_count, avg_rating, best_rating
+    having: note_count >= 3
+    order_by: avg_rating desc
+    limit: 15
+  }
+
+  view: by_region is {
+    group_by: region
+    aggregate: note_count, avg_rating
+    having: note_count >= 3
+    order_by: avg_rating desc
+    limit: 12
+  }
+
+  view: ratings_over_time is {
+    group_by: tasted is tasting_date.year
+    aggregate: note_count, avg_rating
+    order_by: tasted asc
+  }
+
+  view: score_distribution is {
+    group_by: rating
+    aggregate: note_count
+    where: rating is not null
+    order_by: rating asc
+  }
+
+  view: highest_rated is {
+    group_by: wine, producer, vintage_label, rating, tasting_date
+    order_by: rating desc
+    limit: 25
+  }
+
+  view: recent_notes is {
+    group_by: tasting_date, wine, producer, vintage_label, rating, tasting_note
+    order_by: tasting_date desc
+    limit: 30
+  }
+
+  view: tastings is {
+    group_by: event_title, event_date, event_location
+    aggregate: bottles_opened is note_count, avg_rating
+    where: is_event
+    order_by: event_date desc
+    limit: 40
+  }
+}
+
+// ── every bottle, on the rack or gone ───────────────────────────────────────
+
+source: bottles is bottles_table extend {
+  primary_key: bottle_key
+  join_one: owner is cellars on cellar = owner.cellar
+  // Fans out — a wine with 6 bottles and 2 notes makes 12 rows. Malloy's
+  // symmetric aggregates keep bottle counts honest through it, so `notes.*`
+  // can be read straight off the bottle grain.
+  join_many: notes is tasting_notes on cellar = notes.cellar and wine_id = notes.wine_id
+
+  dimension:
+    // How you actually go find a bottle: room, then bin.
+    shelf is concat(location, ' · ', coalesce(bin, '—'))
+
+    style is
+      pick 'Sparkling' when wine_type ~ '%Sparkling%'
+      pick 'Red' when wine_type ~ 'Red%'
+      pick 'White' when wine_type ~ 'White%'
+      pick 'Rosé' when wine_type ~ 'Ros%'
+      else 'Other'
+
+    vintage_label is
+      pick 'NV' when is_non_vintage
+      else vintage::string
+
+    // Age of the WINE (from its vintage), not of the purchase.
+    bottle_age is year(now) - vintage
+
+    // Time on the rack: until it was opened, or until today if it's still here.
+    years_held is days(purchase_date to coalesce(exit_date, now::date)) / 365.25
+
+    age_when_opened is exit_date.year - vintage
+
+    price_band is
+      pick 'Under $25' when bottle_price < 25
+      pick '$25–50' when bottle_price < 50
+      pick '$50–100' when bottle_price < 100
+      pick '$100–250' when bottle_price < 250
+      pick '$250–500' when bottle_price < 500
+      else '$500+'
+
+    price_band_rank is
+      pick 1 when bottle_price < 25
+      pick 2 when bottle_price < 50
+      pick 3 when bottle_price < 100
+      pick 4 when bottle_price < 250
+      pick 5 when bottle_price < 500
+      else 6
+
+  measure:
+    // Everything below reads on any slice — a region, a producer, a year.
+    bottle_count is count()
+    on_hand is count() { where: in_cellar }
+    cellar_value is bottle_price.sum() { where: in_cellar }
+    avg_bottle_price is bottle_price.avg() { where: in_cellar }
+    dearest_bottle is bottle_price.max() { where: in_cellar }
+    magnums is count() { where: in_cellar and bottle_size = '1.5L' }
+
+    drunk is count() { where: status = 'Drunk' }
+    value_drunk is bottle_price.sum() { where: status = 'Drunk' }
+    avg_price_drunk is bottle_price.avg() { where: status = 'Drunk' }
+    sold is count() { where: status = 'Sold' }
+    sale_revenue is revenue.sum() { where: status = 'Sold' }
+    lost is count() { where: status = 'Lost' or status = 'Flawed' }
+    given_away is count() { where: status = 'Given away' }
+
+    wine_count is count(wine_id)
+    wines_on_hand is count(wine_id) { where: in_cellar }
+    producer_count is count(producer) { where: in_cellar }
+    region_count is count(region) { where: in_cellar }
+
+    // Reading through the notes join: what you thought of what you own.
+    //
+    // `rating` is BOTTLE-WEIGHTED — the join fans notes across every bottle of
+    // that wine, so a wine you own twelve of counts twelve times. At the wine
+    // grain (every view below that groups by `wine`) that's exactly the wine's
+    // own average. At coarser grains read it as "the average score behind a
+    // bottle on my rack", which is the useful reading for a cellar anyway. For
+    // an unweighted average over the notes themselves, use `tasting_notes`.
+    rating is notes.rating.avg()
+    // Distinct — count() here would count fanned-out join rows.
+    note_count is count(notes.note_id)
+
+  // ── what's on the rack ────────────────────────────────────────────────────
+
+  view: by_region is {
+    group_by: region
+    aggregate: on_hand, cellar_value
+    where: in_cellar
+    order_by: on_hand desc
+    limit: 12
+  }
+
+  view: by_style is {
+    group_by: style
+    aggregate: on_hand, cellar_value
+    where: in_cellar
+    order_by: on_hand desc
+  }
+
+  view: by_producer is {
+    group_by: producer
+    aggregate: on_hand, cellar_value, rating
+    where: in_cellar
+    order_by: on_hand desc
+    limit: 15
+  }
+
+  view: by_country is {
+    group_by: country
+    aggregate: on_hand, cellar_value
+    where: in_cellar
+    order_by: on_hand desc
+    limit: 10
+  }
+
+  view: by_vintage is {
+    group_by: vintage
+    aggregate: on_hand
+    where: in_cellar and vintage is not null
+    order_by: vintage asc
+  }
+
+  view: by_price_band is {
+    group_by: price_band, price_band_rank
+    aggregate: on_hand, cellar_value
+    where: in_cellar
+    order_by: price_band_rank asc
+  }
+
+  view: by_location is {
+    group_by: location
+    aggregate: on_hand, cellar_value
+    where: in_cellar
+    order_by: on_hand desc
+  }
+
+  view: by_size is {
+    group_by: bottle_size
+    aggregate: on_hand, cellar_value
+    where: in_cellar
+    order_by: on_hand desc
+  }
+
+  // ── the wine-level view: what's left, what's gone, what you thought ───────
+
+  view: deep_holdings is {
+    group_by: wine, producer, region, vintage_label
+    aggregate: on_hand, drunk, cellar_value, rating
+    having: on_hand > 0
+    order_by: on_hand desc
+    limit: 25
+  }
+
+  // The last bottle of something you loved is the most actionable row in a
+  // cellar — you either open it or you never do.
+  view: last_bottles is {
+    group_by: wine, producer, region, vintage_label
+    aggregate: rating, drunk, value is cellar_value
+    having: on_hand = 1 and rating >= 92
+    order_by: rating desc
+    limit: 25
+  }
+
+  // Bought, shelved, never opened, never written up.
+  view: never_tasted is {
+    group_by: wine, producer, region, vintage_label
+    aggregate: on_hand, cellar_value, held is years_held.avg()
+    having: note_count = 0 and on_hand > 0
+    order_by: held desc
+    limit: 25
+  }
+
+  view: oldest_on_hand is {
+    group_by: wine, producer, region, vintage
+    aggregate: on_hand, cellar_value
+    where: in_cellar and vintage is not null
+    order_by: vintage asc
+    limit: 25
+  }
+
+  // ── flow: in and out over time ────────────────────────────────────────────
+
+  view: drinking_by_year is {
+    group_by: drank is exit_date.year
+    aggregate: drunk, value_drunk, avg_price_drunk
+    where: status = 'Drunk'
+    order_by: drank asc
+  }
+
+  view: drinking_by_month is {
+    group_by: drank is exit_date.month
+    aggregate: drunk, value_drunk
+    where: status = 'Drunk'
+    order_by: drank asc
+  }
+
+  view: by_status is {
+    group_by: status
+    aggregate: bottle_count, cost is bottle_price.sum()
+    where: not in_cellar
+    order_by: bottle_count desc
+  }
+
+  view: drunk_by_region is {
+    group_by: region
+    aggregate: drunk, value_drunk
+    where: status = 'Drunk'
+    order_by: drunk desc
+    limit: 12
+  }
+
+  view: drunk_by_producer is {
+    group_by: producer
+    aggregate: drunk, avg_price_drunk, rating
+    where: status = 'Drunk'
+    order_by: drunk desc
+    limit: 15
+  }
+
+  // Weekday drinking is the everyday cellar; weekend is the occasion cellar.
+  view: by_weekday is {
+    group_by: weekday is day_of_week(exit_date)
+    aggregate: drunk, avg_price_drunk
+    where: status = 'Drunk'
+    order_by: weekday asc
+  }
+
+  view: recent_pours is {
+    group_by: exit_date, wine, producer, vintage_label, bottle_price, occasion
+    where: status = 'Drunk'
+    order_by: exit_date desc
+    limit: 40
+  }
+
+  // How long things sit before they get opened.
+  view: holding_time is {
+    group_by: years_shelved is floor(years_held)
+    aggregate: drunk
+    where: status = 'Drunk'
+    order_by: years_shelved asc
+  }
+}
+
+// ── what you bought ─────────────────────────────────────────────────────────
+// Kept separate from `bottles` because the grain is the LOT, not the bottle:
+// this is where order-level questions live (what shipped together, what's
+// still in transit, what a case cost).
+
+source: purchases is purchases_table extend {
+  join_one: owner is cellars on cellar = owner.cellar
+
+  dimension:
+    style is
+      pick 'Sparkling' when wine_type ~ '%Sparkling%'
+      pick 'Red' when wine_type ~ 'Red%'
+      pick 'White' when wine_type ~ 'White%'
+      pick 'Rosé' when wine_type ~ 'Ros%'
+      else 'Other'
+
+    vintage_label is
+      pick 'NV' when is_non_vintage
+      else vintage::string
+
+    days_to_delivery is days(purchase_date to delivery_date)
+
+    price_band is
+      pick 'Under $25' when bottle_price < 25
+      pick '$25–50' when bottle_price < 50
+      pick '$50–100' when bottle_price < 100
+      pick '$100–250' when bottle_price < 250
+      pick '$250–500' when bottle_price < 500
+      else '$500+'
+
+  measure:
+    lot_count is count()
+    bottles_bought is quantity.sum()
+    total_spend is lot_cost.sum()
+    avg_bottle_price is bottle_price.avg()
+    dearest_bottle is bottle_price.max()
+    order_count is count(order_number)
+    store_count is count(store_name)
+    wine_count is count(wine_id)
+    undelivered_bottles is quantity.sum() { where: not delivered }
+    undelivered_value is lot_cost.sum() { where: not delivered }
+    avg_days_to_delivery is days_to_delivery.avg()
+
+  view: spend_by_year is {
+    group_by: bought is purchase_date.year
+    aggregate: total_spend, bottles_bought, avg_bottle_price
+    order_by: bought asc
+  }
+
+  view: spend_by_month is {
+    group_by: bought is purchase_date.month
+    aggregate: total_spend, bottles_bought
+    order_by: bought asc
+  }
+
+  view: by_store is {
+    group_by: store_name
+    aggregate: total_spend, bottles_bought, avg_bottle_price, order_count
+    order_by: total_spend desc
+    limit: 15
+  }
+
+  view: by_region is {
+    group_by: region
+    aggregate: total_spend, bottles_bought, avg_bottle_price
+    order_by: total_spend desc
+    limit: 12
+  }
+
+  view: by_style is {
+    group_by: style
+    aggregate: total_spend, bottles_bought
+    order_by: total_spend desc
+  }
+
+  // The taste-drift chart: what share of each year's buying went where.
+  view: region_mix_by_year is {
+    group_by: bought is purchase_date.year
+    aggregate: bottles_bought
+    nest: regions is {
+      group_by: region
+      aggregate: bottles_bought
+      order_by: bottles_bought desc
+      limit: 8
+    }
+    order_by: bought asc
+  }
+
+  // Which calendar months you actually buy in — auction season, release windows,
+  // December gifting.
+  view: seasonality is {
+    group_by: month_of_year is month(purchase_date)
+    aggregate: bottles_bought, total_spend
+    order_by: month_of_year asc
+  }
+
+  view: in_transit is {
+    group_by: purchase_date, wine, producer, store_name, quantity, lot_cost
+    where: not delivered
+    order_by: purchase_date desc
+    limit: 40
+  }
+
+  view: recent_orders is {
+    group_by: purchase_date, store_name, order_number
+    aggregate: wines is wine_count, bottles_bought, total_spend
+    order_by: purchase_date desc
+    limit: 30
+  }
+
+  view: biggest_lots is {
+    group_by: purchase_date, wine, producer, vintage_label, quantity, bottle_price
+    aggregate: cost is total_spend
+    order_by: cost desc
+    limit: 25
+  }
+}

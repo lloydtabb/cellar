@@ -1,0 +1,64 @@
+##! experimental { givens }
+
+// The other half of the ledger. Bottles leave a cellar five ways, and only one
+// of them is the good one — `by_status` is where the corked bottles, the ones
+// that went missing in a move, and the consignment sale show up.
+
+import "../cellar.malloy"
+import "../givens.malloy"
+
+#" What you've been drinking, how fast, and what left the cellar another way.
+# artifact { title="Drinking" }
+# dashboard { columns=6 }
+query: drinking is bottles -> {
+  where:
+    owner.cellar_name ~ $CELLAR,
+    region ~ $REGION,
+    producer ~ $PRODUCER,
+    style ~ $STYLE,
+    exit_date ~ $PERIOD
+
+  # colspan=2
+  aggregate:
+    # label="Bottles drunk"
+    drunk
+    # label="Value drunk" currency
+    value_drunk
+    # label="Average bottle opened" currency
+    avg_price_drunk
+    # label="Sold"
+    sold
+    # label="Sale revenue" currency
+    sale_revenue
+    # label="Lost or flawed"
+    lost
+
+  # colspan=3
+  nest:
+    # break
+    # line_chart
+    # label="Bottles opened by year"
+    drinking_by_year
+    # bar_chart
+    # label="What you drink"
+    drunk_by_region
+    # bar_chart
+    # label="Who you drink"
+    drunk_by_producer
+    // Weekday drinking is the everyday cellar; the weekend is the occasion one.
+    # bar_chart
+    # label="Which day of the week"
+    by_weekday
+    # bar_chart
+    # label="Years held before opening"
+    holding_time
+    # bar_chart
+    # label="How bottles left"
+    by_status
+
+  # colspan=6
+  nest:
+    # break
+    # label="Recently opened"
+    recent_pours
+}
