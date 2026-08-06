@@ -47,8 +47,8 @@ query: buying is purchases -> {
     by_region
     // Auction season, mailing-list release windows, December gifting — buying is
     // never evenly spread across the year.
-    # bar_chart
-    # label="Which months you buy in (1 = January)"
+    # bar_chart { x=month_name y=bottles_bought }
+    # label="Which months you buy in"
     seasonality
 
   # colspan=6

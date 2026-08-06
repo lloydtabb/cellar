@@ -46,8 +46,11 @@ query: drinking is bottles -> {
     # label="Who you drink"
     drunk_by_producer
     // Weekday drinking is the everyday cellar; the weekend is the occasion one.
-    # bar_chart
-    # label="Which day of the week (1 = Sunday)"
+    // Channels named explicitly rather than left to auto-detection. The view
+    // carries a `weekday_sort` MEASURE to order Sun→Sat; measures don't count
+    // as chart dimensions, so nothing gets promoted to a colour series.
+    # bar_chart { x=weekday y=drunk }
+    # label="Which day of the week"
     by_weekday
     # bar_chart
     # label="Years held before opening"

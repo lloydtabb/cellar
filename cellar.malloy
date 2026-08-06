@@ -366,19 +366,27 @@ source: bottles is bottles_table extend {
 
   // Weekday drinking is the everyday cellar; weekend is the occasion cellar.
   //
-  // Grouped by the raw day NUMBER, deliberately. Two attempts at a friendlier
-  // axis both failed against the renderer: adding the day name as a second
-  // group_by makes the chart read it as a series (`# hidden` does not keep a
-  // dimension out of a chart), and mapping the number to a name in a second
-  // `select:` stage turns every column into a dimension, which a bar chart
-  // rejects outright. One numeric dimension sorts correctly and renders; the
-  // dashboard tile carries the "1 = Sunday" gloss. (Verified: 2026-04-27, a
-  // Monday, returns 2.)
+  // The axis reads Sunday…Saturday because the sort key is a MEASURE, not a
+  // dimension. That distinction is the whole trick: the renderer counts only
+  // DIMENSIONS when deciding what a chart's channels are, and with two
+  // dimensions in the result it promotes the spare one to a colour series (and
+  // `# hidden` does not exempt it). A `min()` of the day number sorts the rows
+  // without ever being a dimension, so the chart sees exactly one — the name.
   view: by_weekday is {
-    group_by: weekday is day_of_week(exit_date)
-    aggregate: drunk, avg_price_drunk
+    group_by: weekday is
+      pick 'Sunday' when day_of_week(exit_date) = 1
+      pick 'Monday' when day_of_week(exit_date) = 2
+      pick 'Tuesday' when day_of_week(exit_date) = 3
+      pick 'Wednesday' when day_of_week(exit_date) = 4
+      pick 'Thursday' when day_of_week(exit_date) = 5
+      pick 'Friday' when day_of_week(exit_date) = 6
+      else 'Saturday'
+    aggregate:
+      drunk
+      avg_price_drunk
+      weekday_sort is min(day_of_week(exit_date))
     where: status = 'Drunk'
-    order_by: weekday asc
+    order_by: weekday_sort asc
   }
 
   view: recent_pours is {
@@ -504,11 +512,26 @@ source: purchases is purchases_table extend {
 
   // Which calendar months you actually buy in — auction season, release windows,
   // December gifting.
-  // One numeric dimension, for the same renderer reasons as bottles.by_weekday.
+  // Jan…Dec via the same measure-as-sort-key trick as bottles.by_weekday.
   view: seasonality is {
-    group_by: month_of_year is month(purchase_date)
-    aggregate: bottles_bought, total_spend
-    order_by: month_of_year asc
+    group_by: month_name is
+      pick 'Jan' when month(purchase_date) = 1
+      pick 'Feb' when month(purchase_date) = 2
+      pick 'Mar' when month(purchase_date) = 3
+      pick 'Apr' when month(purchase_date) = 4
+      pick 'May' when month(purchase_date) = 5
+      pick 'Jun' when month(purchase_date) = 6
+      pick 'Jul' when month(purchase_date) = 7
+      pick 'Aug' when month(purchase_date) = 8
+      pick 'Sep' when month(purchase_date) = 9
+      pick 'Oct' when month(purchase_date) = 10
+      pick 'Nov' when month(purchase_date) = 11
+      else 'Dec'
+    aggregate:
+      bottles_bought
+      total_spend
+      month_sort is min(month(purchase_date))
+    order_by: month_sort asc
   }
 
   view: in_transit is {

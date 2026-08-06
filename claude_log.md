@@ -212,6 +212,33 @@ the server was restarted, even though the CLI and lint were both happy.
 
 ---
 
+**User:** (on the weekday/month axes)
+
+> You can explicitly mark the axis on rendering.
+> ...
+> malloydata/malloydata.github.io is the documentation. you should read that.
+
+**Claude:** Both corrections landed, and together they fixed the thing properly.
+
+Reading the actual visualization docs (rather than reverse-engineering the
+minified renderer, which is what I had been doing) showed the chart tag takes
+`x=` / `y=` / `series=`. It also showed `# hidden` is specified for `big_value`
+comparison fields and `# link` targets — NOT for chart channels. So the renderer
+was never misbehaving against its spec, and my instinct to file a bug about it
+was wrong. Good thing the user said not to.
+
+The real constraint is that the renderer assigns channels by counting
+DIMENSIONS: two dimensions with only `x` named means the spare one gets promoted
+to a colour series. So the fix is to keep the sort key out of the dimension
+count entirely — express it as a MEASURE (`min(day_of_week(exit_date))`), which
+sorts the rows and can never become a channel. Both axes now read Sunday→Saturday
+and Jan→Dec, with `x=`/`y=` named explicitly on the tiles.
+
+Written up in the README under "Renderer notes", including the two approaches
+that don't work, so the next person doesn't repeat them.
+
+---
+
 **User:**
 
 > by the way /web-setup is what fixed the problem

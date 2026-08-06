@@ -106,6 +106,41 @@ site needs both hosts reachable from the visitor's browser. `--duckdb bundled`
 self-hosts the WASM core instead, but adds 77 MB to the repo and doesn't remove
 the extension fetch, so it isn't used here.
 
+## Renderer notes
+
+Chart channels are set explicitly with the tag, per the
+[visualization docs](https://github.com/malloydata/malloydata.github.io/tree/main/src/documentation/visualizations):
+
+```malloy
+# bar_chart { x=weekday y=drunk series=region }
+```
+
+The rule worth knowing, because it isn't obvious: **the renderer decides a
+chart's channels by counting DIMENSIONS.** If a result has two dimensions and
+you only name `x`, it promotes the spare one to a colour series; three
+dimensions and a bar chart refuses outright. `# hidden` does not exempt a field
+— it is documented for `big_value` comparison fields and `# link` targets, not
+for chart channels.
+
+That makes "label the axis with a name, sort it by a number" trickier than it
+looks. The way through is to express the sort key as a **measure**, since
+measures aren't dimensions and so never become a series:
+
+```malloy
+view: by_weekday is {
+  group_by: weekday is pick 'Sunday' when day_of_week(exit_date) = 1 ...
+  aggregate:
+    drunk
+    weekday_sort is min(day_of_week(exit_date))   // sorts; never a channel
+  order_by: weekday_sort asc
+}
+```
+
+Two approaches that do NOT work, both tried here: a second `group_by` for the
+sort key (becomes a colour series), and mapping the number to a name in a
+second `select:` stage (a projection has no measures, so every column becomes a
+dimension and the chart rejects three).
+
 ## Publishing
 
 `docs/` is committed and GitHub Pages serves it from the default branch. Rebuild
